@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TP & SL Calculator with Asset Selection</title>
+    <!-- Link til CSS-styling -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="main-container">
+        <!-- Kalkulator Boks -->
+        <div class="box calculator">
+            <h2>TP & SL Calculator</h2>
+            <label for="asset">Select Asset:</label>
+            <select id="asset">
+                <option value="BTC-USD">BTC/USD</option>
+                <option value="ETH-USD">ETH/USD</option>
+                <option value="XAU-USD">Gold (XAU/USD)</option>
+                <option value="AAPL">Apple (AAPL)</option>
+            </select>
+            <br>
+            <button onclick="fetchPrice()">Get Current Price</button>
+            <br>
+            <label for="entryPrice">Entry Price:</label>
+            <input type="number" id="entryPrice" placeholder="Enter entry price" step="0.01">
+            <br>
+            <label for="usdAmount">Trade Size (USD):</label>
+            <input type="number" id="usdAmount" placeholder="Enter trade size in USD" step="0.01">
+            <br>
+            <label for="leverage">Leverage:</label>
+            <input type="number" id="leverage" placeholder="Enter leverage" value="1">
+            <br>
+            <button onclick="calculateTPSL()">Calculate TP & SL</button>
+            <button onclick="saveResult()">Save Result</button>
+            <div id="results">
+                <h3>Take-Profit Points:</h3>
+                <ul id="tpPoints"></ul>
+                <h3>Stop-Loss Points:</h3>
+                <ul id="slPoints"></ul>
+            </div>
+        </div>
+
+        <!-- Gemte Resultater Boks -->
+        <div class="box saved-results">
+            <h2>Saved Trades</h2>
+            <div id="savedResultsContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // Opdateret fetchPrice-funktion til at indhente pris fra API
+        async function fetchPrice() {
+            const asset = document.getElementById('asset').value;
+            try {
+                const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${asset.replace("-", "")}`);
+                const data = await response.json();
+                const currentPrice = parseFloat(data.price);
+                document.getElementById('entryPrice').value = currentPrice.toFixed(2);
+                alert(`The current price for ${asset} is ${currentPrice.toFixed(2)} USD`);
+            } catch (error) {
+                alert(`Unable to fetch the current price for ${asset}. Please try again later.`);
+            }
+        }
+
+        // Beregningslogik for TP & SL Points
+        function calculateTPSL() {
+            const entryPrice = parseFloat(document.getElementById('entryPrice').value);
+            const usdAmount = parseFloat(document.getElementById('usdAmount').value);
+            const leverage = parseFloat(document.getElementById('leverage').value);
+
+            if (isNaN(entryPrice) || entryPrice <= 0 || isNaN(usdAmount) || usdAmount <= 0 || isNaN(leverage) || leverage <= 0) {
+                alert("Please enter valid values for entry price, trade size, and leverage.");
+                return;
+            }
+
+            // Beregn SL Points
+            const sl1 = entryPrice * 0.9985; // -0.15%
+            const sl2 = entryPrice * 0.997;  // -0.3%
+            const sl1PL = ((entryPrice - sl1) / entryPrice) * usdAmount * leverage;
+            const sl2PL = ((entryPrice - sl2) / entryPrice) * usdAmount * leverage;
+
+            // Beregn TP Points
+            const tpValues = [0.003, 0.006, 0.009, 0.012, 0.015];
+            let tpPoints = [];
+            let tpProfits = [];
+            for (let i = 0; i < tpValues.length; i++) {
+                let tpPrice = entryPrice * (1 + tpValues[i]);
+                let tpPL = ((tpPrice - entryPrice) / entryPrice) * usdAmount * leverage;
+                tpPoints.push(tpPrice);
+                tpProfits.push(tpPL);
+            }
+
+            // Vis TP og SL Points i den ønskede rækkefølge
+            document.getElementById('slPoints').innerHTML = `
+                <li class="loss-point">SL 1 (-0.15%): ${sl1.toFixed(2)} | P&L: -$${Math.abs(sl1PL.toFixed(2))}</li>
+                <li class="loss-point">SL 2 (-0.3%): ${sl2.toFixed(2)} | P&L: -$${Math.abs(sl2PL.toFixed(2))}</li>`;
+
+            document.getElementById('tpPoints').innerHTML = tpPoints.reverse().map((tp, index) => 
+                `<li>TP ${5 - index} (+${(tpValues[4 - index] * 100).toFixed(1)}%): ${tp.toFixed(2)} | P&L: +$${tpProfits[4 - index].toFixed(2)}</li>`).join('');
+        }
+
+        // Funktion til at gemme resultater
+        function saveResult() {
+            const entryPrice = parseFloat(document.getElementById('entryPrice').value);
+            const tpPoints = document.getElementById('tpPoints').innerHTML;
+            const slPoints = document.getElementById('slPoints').innerHTML;
+
+            if (tpPoints === "" || slPoints === "" || isNaN(entryPrice)) {
+                alert("Please calculate TP & SL points first.");
+                return;
+            }
+
+            // Opret en ny boks med de gemte resultater
+            const savedResultsContainer = document.getElementById('savedResultsContainer');
+            const newSavedResultBox = document.createElement('div');
+            newSavedResultBox.classList.add('result-box');
+            newSavedResultBox.innerHTML = `
+                <h3>Saved Trade</h3>
+                <p>Bet Entry Price: ${entryPrice.toFixed(2)}</p>
+                <h4>Take-Profit Points:</h4>
+                <ul>${tpPoints}</ul>
+                <h4>Stop-Loss Points:</h4>
+                <ul>${slPoints}</ul>
+                <button onclick="deleteResult(this)">Delete</button>
+            `;
+            savedResultsContainer.appendChild(newSavedResultBox);
+        }
+
+        // Funktion til at slette gemte resultater
+        function deleteResult(button) {
+            const resultBox = button.parentElement;
+            resultBox.remove();
+        }
+    </script>
+</body>
+</html>
